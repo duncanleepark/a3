@@ -18,6 +18,14 @@ type cell = {
   mutable lambda : lambda option;
 }
 
+type setup = {
+  grid : terrain array array;
+  camel : position;
+  sandworm : position;
+  exit : position;
+  lambdas : (position * lambda) list;
+}
+
 type world = {
   grid : cell array array;
   camel : position;
@@ -41,3 +49,23 @@ let lambda_at world position =
 let camel_position world = world.camel
 let sandworm_position world = world.sandworm
 let exit_position world = world.exit
+
+let from_setup setup =
+  let grid =
+    Array.map
+      (fun row ->
+        Array.map
+          (fun terrain -> { terrain; lambda = None })
+          row)
+      setup.grid
+  in
+  List.iter
+    (fun (position, lambda) ->
+      grid.(position.row).(position.col).lambda <- Some lambda)
+    setup.lambdas;
+  {
+    grid;
+    camel = setup.camel;
+    sandworm = setup.sandworm;
+    exit = setup.exit;
+  }
