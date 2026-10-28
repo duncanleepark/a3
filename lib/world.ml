@@ -69,3 +69,17 @@ let from_setup setup =
     sandworm = setup.sandworm;
     exit = setup.exit;
   }
+
+let lambdas world =
+  let result = ref [] in
+  Array.iteri
+    (fun row cells ->
+      Array.iteri
+        (fun col cell ->
+          match cell.lambda with
+          | None -> ()
+          | Some lambda ->
+              result := ({ row; col }, lambda) :: !result)
+        cells)
+    world.grid;
+  List.rev !result
