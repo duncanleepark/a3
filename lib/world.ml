@@ -32,5 +32,12 @@ let cols world =
   if rows world = 0 then 0
   else Array.length world.grid.(0)
 
-let camel_position world =
-  world.camel
+let terrain_at world position =
+  world.grid.(position.row).(position.col).terrain
+
+let lambda_at world position =
+  world.grid.(position.row).(position.col).lambda
+
+let camel_position world = world.camel
+let sandworm_position world = world.sandworm
+let exit_position world = world.exit

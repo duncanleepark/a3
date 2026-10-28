@@ -29,3 +29,13 @@ val sandworm_position : world -> position
 val exit_position : world -> position
 
 val lambdas : world -> (position * lambda) list
+
+type setup = {
+  grid : terrain array array;
+  camel : position;
+  sandworm : position;
+  exit : position;
+  lambdas : (position * lambda) list;
+}
+
+val from_setup : setup -> world
