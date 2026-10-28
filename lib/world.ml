@@ -141,6 +141,8 @@ let generate seed =
     if row <> 2 && row <> 7 && row <> 12 then grid.(row).(15) <- Wall;
     if row <> 5 && row <> 11 then grid.(row).(30) <- Wall
   done;
+  let varied_wall_column = 2 + Random.State.int random 12 in
+  grid.(2).(varied_wall_column) <- Wall;
   let floors = ref [] in
   Array.iteri
     (fun row cells ->
@@ -150,32 +152,72 @@ let generate seed =
         cells)
     grid;
   let floors = Array.of_list !floors in
-  let choose_far position =
+  let choose_far ?(excluded = []) position =
     let candidates =
       Array.to_list floors
       |> List.filter (fun other ->
            abs (position.row - other.row) + abs (position.col - other.col) >= 6)
+      |> List.filter (fun other -> not (List.mem other excluded))
     in
     List.nth candidates (Random.State.int random (List.length candidates))
   in
   let camel = floors.(Random.State.int random (Array.length floors)) in
   let sandworm = choose_far camel in
-  let exit = choose_far camel in
+  let exit = choose_far ~excluded:[ sandworm ] camel in
   grid.(exit.row).(exit.col) <- Exit;
+  let reachable_positions start =
+    let visited = Array.make_matrix row_count col_count false in
+    let rec visit positions = function
+      | [] -> positions
+      | position :: rest ->
+          if
+            position.row < 0
+            || position.row >= row_count
+            || position.col < 0
+            || position.col >= col_count
+            || visited.(position.row).(position.col)
+            || grid.(position.row).(position.col) = Wall
+          then visit positions rest
+          else (
+            visited.(position.row).(position.col) <- true;
+            let neighbors =
+              [
+                { row = position.row - 1; col = position.col };
+                { row = position.row; col = position.col + 1 };
+                { row = position.row + 1; col = position.col };
+                { row = position.row; col = position.col - 1 };
+              ]
+            in
+            visit (position :: positions) (List.rev_append neighbors rest))
+    in
+    visit [] [ start ]
+  in
   let occupied position =
     position = camel || position = sandworm || position = exit
   in
-  let lambda_positions =
-    Array.to_list floors
+  let reachable_landing_spots =
+    reachable_positions camel
     |> List.filter (fun position -> not (occupied position))
-    |> List.filter (fun _ -> Random.State.int random 4 = 0)
+  in
+  let choose_random positions =
+    let index = Random.State.int random (List.length positions) in
+    let rec remove_at index = function
+      | [] -> failwith "World.generate: invalid lambda position"
+      | position :: rest ->
+          if index = 0 then position, rest
+          else
+            let chosen, remaining = remove_at (index - 1) rest in
+            chosen, position :: remaining
+    in
+    remove_at index positions
+  in
+  let first, remaining = choose_random reachable_landing_spots in
+  let second, remaining = choose_random remaining in
+  let optional_lambdas =
+    List.filter (fun _ -> Random.State.int random 4 = 0) remaining
+    |> List.map (fun position -> position, Copper)
   in
   let lambdas =
-    match lambda_positions with
-    | first :: second :: rest ->
-        (first, Gold) :: (second, Silver)
-        :: List.map (fun position -> (position, Copper)) rest
-    | first :: [] -> [ (first, Gold) ]
-    | [] -> []
+    (first, Gold) :: (second, Silver) :: optional_lambdas
   in
   from_setup { grid; camel; sandworm; exit; lambdas }

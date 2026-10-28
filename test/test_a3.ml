@@ -166,7 +166,13 @@ let test_generated_paths _ =
 
 let test_generated_terrain_varies _ =
   let first = generated_snapshot 0 in
-  let terrain_of_snapshot (_, _, terrain, _, _, _, _) = terrain in
+  let terrain_of_snapshot (_, _, terrain, _, _, _, _) =
+    Array.map
+      (Array.map (function
+        | Exit -> Floor
+        | terrain -> terrain))
+      terrain
+  in
   assert_bool "terrain should vary across seeds"
     (List.init 20 (fun index -> index + 1)
      |> List.exists (fun seed ->
@@ -200,11 +206,37 @@ let test_game_initial_reveal _ =
   assert_bool "distant cell remains hidden"
     (not (Game.is_revealed game (make_position 1 1)))
 
+let boxed_game ~camel ~sandworm ~exit ~lambdas ~extra_walls =
+  let grid =
+    Array.init 5 (fun row ->
+        Array.init 5 (fun col ->
+            if row = 0 || row = 4 || col = 0 || col = 4 then Wall
+            else Floor))
+  in
+  List.iter
+    (fun position -> grid.(position.row).(position.col) <- Wall)
+    extra_walls;
+  grid.(exit.row).(exit.col) <- Exit;
+  Game.of_world
+    (from_setup { grid; camel; sandworm; exit; lambdas })
+
+let test_fog_stops_at_wall _ =
+  let game =
+    boxed_game ~camel:(make_position 2 1) ~sandworm:(make_position 3 3)
+      ~exit:(make_position 3 2) ~lambdas:[]
+      ~extra_walls:[ make_position 2 2 ]
+  in
+  assert_bool "wall adjacent to camel is revealed"
+    (Game.is_revealed game (make_position 2 2));
+  assert_bool "cell beyond wall remains hidden"
+    (not (Game.is_revealed game (make_position 2 3)))
+
 let test_game_blocked_move _ =
   let game = Game.of_world (game_world ()) in
   Game.act game (Game.Move Game.West);
   assert_equal (make_position 3 1) (Game.camel_position game);
   assert_equal 0 (Game.turns game);
+  assert_equal (make_position 1 5) (Game.sandworm_position game);
   assert_equal Game.Playing (Game.outcome game)
 
 let test_game_collects_lambda _ =
@@ -216,12 +248,111 @@ let test_game_collects_lambda _ =
     (lambda_at (Game.world game) (make_position 3 2));
   assert_equal 1 (Game.turns game)
 
+let test_game_collects_lambda_once _ =
+  let game = Game.of_world (game_world ()) in
+  Game.act game (Game.Move Game.East);
+  Game.act game (Game.Move Game.West);
+  Game.act game (Game.Move Game.East);
+  assert_equal 3 (Game.score game);
+  assert_equal 3 (Game.turns game)
+
 let test_game_wait _ =
   let game = Game.of_world (game_world ()) in
   Game.act game Game.Wait;
   assert_equal 1 (Game.turns game);
   assert_equal (make_position 3 1) (Game.camel_position game);
   assert_equal Game.Playing (Game.outcome game)
+
+let test_sandworm_tie_breaks_north_first _ =
+  let game =
+    boxed_game ~camel:(make_position 1 1) ~sandworm:(make_position 2 2)
+      ~exit:(make_position 3 3) ~lambdas:[] ~extra_walls:[]
+  in
+  Game.act game Game.Wait;
+  assert_equal (make_position 1 2) (Game.sandworm_position game)
+
+let test_sandworm_skips_walls_and_exit _ =
+  let game =
+    boxed_game ~camel:(make_position 1 1) ~sandworm:(make_position 2 2)
+      ~exit:(make_position 3 2) ~lambdas:[]
+      ~extra_walls:[ make_position 1 2; make_position 2 1 ]
+  in
+  Game.act game Game.Wait;
+  assert_equal (make_position 2 3) (Game.sandworm_position game)
+
+let test_boxed_in_sandworm_does_not_move _ =
+  let game =
+    boxed_game ~camel:(make_position 1 1) ~sandworm:(make_position 2 2)
+      ~exit:(make_position 3 3) ~lambdas:[]
+      ~extra_walls:
+        [
+          make_position 1 2;
+          make_position 2 1;
+          make_position 2 3;
+          make_position 3 2;
+        ]
+  in
+  Game.act game Game.Wait;
+  assert_equal (make_position 2 2) (Game.sandworm_position game)
+
+let test_exit_requires_eight_points _ =
+  let game =
+    boxed_game ~camel:(make_position 2 1) ~sandworm:(make_position 3 3)
+      ~exit:(make_position 2 3)
+      ~lambdas:
+        [
+          (make_position 1 1, Gold);
+          (make_position 1 2, Copper);
+          (make_position 1 3, Copper);
+        ]
+      ~extra_walls:[ make_position 3 2; make_position 3 1 ]
+  in
+  List.iter
+    (Game.act game)
+    [ Game.Move Game.North; Game.Move Game.East; Game.Move Game.East;
+      Game.Move Game.South ];
+  assert_equal 7 (Game.score game);
+  assert_equal Game.Playing (Game.outcome game)
+
+let test_victory_stops_the_game _ =
+  let game =
+    boxed_game ~camel:(make_position 2 1) ~sandworm:(make_position 3 3)
+      ~exit:(make_position 2 3)
+      ~lambdas:
+        [ (make_position 1 1, Gold); (make_position 1 2, Silver) ]
+      ~extra_walls:[ make_position 3 2; make_position 3 1 ]
+  in
+  List.iter
+    (Game.act game)
+    [ Game.Move Game.North; Game.Move Game.East; Game.Move Game.East;
+      Game.Move Game.South ];
+  assert_equal 8 (Game.score game);
+  assert_equal Game.Victory (Game.outcome game);
+  let turns = Game.turns game in
+  Game.act game (Game.Move Game.West);
+  assert_equal turns (Game.turns game);
+  assert_equal (make_position 2 3) (Game.camel_position game)
+
+let test_collision_prevents_collection _ =
+  let game =
+    boxed_game ~camel:(make_position 2 1) ~sandworm:(make_position 2 2)
+      ~exit:(make_position 3 3) ~lambdas:[ (make_position 2 2, Gold) ]
+      ~extra_walls:[ make_position 3 2; make_position 3 1 ]
+  in
+  Game.act game (Game.Move Game.East);
+  assert_equal Game.Defeat (Game.outcome game);
+  assert_equal 0 (Game.score game);
+  assert_equal (Some Gold)
+    (lambda_at (Game.world game) (make_position 2 2))
+
+let test_sandworm_collision_after_wait _ =
+  let game =
+    boxed_game ~camel:(make_position 2 2) ~sandworm:(make_position 2 3)
+      ~exit:(make_position 3 3) ~lambdas:[] ~extra_walls:[]
+  in
+  Game.act game Game.Wait;
+  assert_equal Game.Defeat (Game.outcome game);
+  assert_equal (make_position 2 2) (Game.sandworm_position game)
 
 let suite =
   "a3"
@@ -238,9 +369,18 @@ let suite =
          "generated paths" >:: test_generated_paths;
          "generated terrain varies" >:: test_generated_terrain_varies;
          "game initial reveal" >:: test_game_initial_reveal;
+         "fog stops at wall" >:: test_fog_stops_at_wall;
          "game blocked move" >:: test_game_blocked_move;
          "game collects lambda" >:: test_game_collects_lambda;
+         "game collects lambda once" >:: test_game_collects_lambda_once;
          "game wait" >:: test_game_wait;
+         "sandworm tie breaks north first" >:: test_sandworm_tie_breaks_north_first;
+         "sandworm skips walls and exit" >:: test_sandworm_skips_walls_and_exit;
+         "boxed-in sandworm does not move" >:: test_boxed_in_sandworm_does_not_move;
+         "exit requires eight points" >:: test_exit_requires_eight_points;
+         "victory stops the game" >:: test_victory_stops_the_game;
+         "collision prevents collection" >:: test_collision_prevents_collection;
+         "sandworm collision after wait" >:: test_sandworm_collision_after_wait;
        ]
 
 let () = run_test_tt_main suite
