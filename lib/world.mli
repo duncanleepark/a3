@@ -23,6 +23,7 @@ val from_grid : terrain array array -> world
 
 val terrain_at : world -> position -> terrain
 val lambda_at : world -> position -> lambda option
+val collect_lambda : world -> position -> lambda option
 
 val camel_position : world -> position
 val sandworm_position : world -> position

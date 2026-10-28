@@ -173,6 +173,56 @@ let test_generated_terrain_varies _ =
             terrain_of_snapshot (generated_snapshot seed)
             <> terrain_of_snapshot first))
 
+let game_world () =
+  let grid =
+    Array.init 7 (fun row ->
+        Array.init 7 (fun col ->
+            if row = 0 || row = 6 || col = 0 || col = 6 then Wall else Floor))
+  in
+  grid.(5).(5) <- Exit;
+  from_setup
+    {
+      grid;
+      camel = make_position 3 1;
+      sandworm = make_position 1 5;
+      exit = make_position 5 5;
+      lambdas = [ (make_position 3 2, Silver) ];
+    }
+
+let test_game_initial_reveal _ =
+  let game = Game.of_world (game_world ()) in
+  assert_bool "camel is initially revealed"
+    (Game.is_revealed game (make_position 3 1));
+  assert_bool "north neighbor is initially revealed"
+    (Game.is_revealed game (make_position 2 1));
+  assert_bool "east neighbor is initially revealed"
+    (Game.is_revealed game (make_position 3 2));
+  assert_bool "distant cell remains hidden"
+    (not (Game.is_revealed game (make_position 1 1)))
+
+let test_game_blocked_move _ =
+  let game = Game.of_world (game_world ()) in
+  Game.act game (Game.Move Game.West);
+  assert_equal (make_position 3 1) (Game.camel_position game);
+  assert_equal 0 (Game.turns game);
+  assert_equal Game.Playing (Game.outcome game)
+
+let test_game_collects_lambda _ =
+  let game = Game.of_world (game_world ()) in
+  Game.act game (Game.Move Game.East);
+  assert_equal (make_position 3 2) (Game.camel_position game);
+  assert_equal 3 (Game.score game);
+  assert_equal None
+    (lambda_at (Game.world game) (make_position 3 2));
+  assert_equal 1 (Game.turns game)
+
+let test_game_wait _ =
+  let game = Game.of_world (game_world ()) in
+  Game.act game Game.Wait;
+  assert_equal 1 (Game.turns game);
+  assert_equal (make_position 3 1) (Game.camel_position game);
+  assert_equal Game.Playing (Game.outcome game)
+
 let suite =
   "a3"
   >::: [
@@ -187,6 +237,10 @@ let suite =
          "generated lambdas" >:: test_generated_lambdas;
          "generated paths" >:: test_generated_paths;
          "generated terrain varies" >:: test_generated_terrain_varies;
+         "game initial reveal" >:: test_game_initial_reveal;
+         "game blocked move" >:: test_game_blocked_move;
+         "game collects lambda" >:: test_game_collects_lambda;
+         "game wait" >:: test_game_wait;
        ]
 
 let () = run_test_tt_main suite

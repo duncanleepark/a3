@@ -82,6 +82,12 @@ let terrain_at world position =
 let lambda_at world position =
   world.grid.(position.row).(position.col).lambda
 
+let collect_lambda world position =
+  let cell = world.grid.(position.row).(position.col) in
+  let collected = cell.lambda in
+  cell.lambda <- None;
+  collected
+
 let camel_position world = world.camel
 let sandworm_position world = world.sandworm
 let exit_position world = world.exit
