@@ -27,6 +27,8 @@ type t = {
   revealed : bool array array;
 }
 
+(** [of_world world] initializes game state and reveals the camel's starting
+    cross. *)
 let of_world world =
   let game =
     {
@@ -54,28 +56,41 @@ let of_world world =
     ];
   game
 
+(** [create ~seed] generates a world from [seed] and initializes a game on it. *)
 let create ~seed =
   of_world (World.generate seed)
 
+(** [world game] is the world used by [game]. *)
 let world game = game.world
+(** [camel_position game] is the camel's current position. *)
 let camel_position game = game.camel
+(** [sandworm_position game] is the sandworm's current position. *)
 let sandworm_position game = game.sandworm
+(** [score game] is the current score. *)
 let score game = game.score
+(** [turns game] is the number of completed turns. *)
 let turns game = game.turns
+(** [outcome game] is the current outcome. *)
 let outcome game = game.outcome
 
+(** [in_bounds game position] is [true] when [position] is in [game]'s world. *)
 let in_bounds game position =
   position.row >= 0
   && position.row < World.rows game.world
   && position.col >= 0
   && position.col < World.cols game.world
 
+(** [is_revealed game position] is [true] when the camel has discovered
+    [position]. *)
 let is_revealed game position =
   in_bounds game position && game.revealed.(position.row).(position.col)
 
+(** [reveal game position] marks [position] as revealed when it is in bounds. *)
 let reveal game position =
   if in_bounds game position then game.revealed.(position.row).(position.col) <- true
 
+(** [reveal_cross game position] reveals [position] and its four orthogonal
+    neighbors. *)
 let reveal_cross game position =
   reveal game position;
   List.iter
@@ -87,28 +102,35 @@ let reveal_cross game position =
       position.row, position.col - 1;
     ]
 
+(** [move_position position direction] is the position one step from [position]
+    in [direction]. *)
 let move_position position = function
   | North -> { World.row = position.row - 1; col = position.col }
   | East -> { World.row = position.row; col = position.col + 1 }
   | South -> { World.row = position.row + 1; col = position.col }
   | West -> { World.row = position.row; col = position.col - 1 }
 
+(** [passable game position] is [true] when an actor may enter [position]. *)
 let passable game position =
   in_bounds game position && World.terrain_at game.world position <> Wall
 
+(** [lambda_value lambda] is the score value of [lambda]. *)
 let lambda_value = function
   | World.Copper -> 1
   | World.Silver -> 3
   | World.Gold -> 5
 
+(** [collect game] adds the camel's lambda value to the score and removes it. *)
 let collect game =
   match World.collect_lambda game.world game.camel with
   | None -> ()
   | Some lambda -> game.score <- game.score + lambda_value lambda
 
+(** [defeat_if_colliding game] ends [game] in defeat when the actors collide. *)
 let defeat_if_colliding game =
   if game.camel = game.sandworm then game.outcome <- Defeat
 
+(** [sandworm_step game] moves the sandworm to its best legal neighboring cell. *)
 let sandworm_step game =
   let candidates =
     [
@@ -141,6 +163,7 @@ let sandworm_step game =
       game.sandworm <- best_position;
       defeat_if_colliding game
 
+(** [act game action] applies [action] according to the game rules. *)
 let act game (action : action) =
   match action with
   | Quit ->

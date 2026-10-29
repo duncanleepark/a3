@@ -1,9 +1,11 @@
 open A3
 
+(** [usage ()] prints command-line usage information and exits with an error. *)
 let usage () =
   Printf.eprintf "Usage: dune exec a3 -- [nonnegative-seed]\n";
   exit 1
 
+(** [seed_from_args ()] parses a nonnegative seed or generates one when omitted. *)
 let seed_from_args () =
   match Array.length Sys.argv with
   | 1 ->
@@ -20,11 +22,14 @@ let seed_from_args () =
           usage ())
   | _ -> usage ()
 
+(** [lambda_symbol lambda] is the display character for [lambda]. *)
 let lambda_symbol = function
   | World.Copper -> 'c'
   | World.Silver -> 's'
   | World.Gold -> 'g'
 
+(** [terrain_symbol world position] is the display character for a revealed
+    cell at [position]. *)
 let terrain_symbol world position =
   match World.lambda_at world position with
   | Some lambda -> lambda_symbol lambda
@@ -34,6 +39,8 @@ let terrain_symbol world position =
       | World.Floor -> '.'
       | World.Exit -> '>')
 
+(** [symbol_at game position] is the display character for [position] in
+    [game]. *)
 let symbol_at game position =
   let world = Game.world game in
   let camel = Game.camel_position game in
@@ -46,6 +53,7 @@ let symbol_at game position =
   | _ when not (Game.is_revealed game position) -> '?'
   | _ -> terrain_symbol world position
 
+(** [render seed game] redraws the current game state in the terminal. *)
 let render seed game =
   let world = Game.world game in
   print_string "\027[2J\027[H";
@@ -65,6 +73,7 @@ let render seed game =
   | Game.Quit -> print_endline "\nYou quit the game.");
   flush stdout
 
+(** [action_of_char character] translates an input key into a game action. *)
 let action_of_char = function
   | 'w' -> Some (Game.Move Game.North)
   | 'a' -> Some (Game.Move Game.West)
@@ -74,6 +83,8 @@ let action_of_char = function
   | 'q' -> Some Game.Quit
   | _ -> None
 
+(** [with_raw_terminal f] runs [f] with immediate terminal input and restores
+    the original terminal settings afterward. *)
 let with_raw_terminal f =
   let original = Unix.tcgetattr Unix.stdin in
   let raw = { original with Unix.c_icanon = false; c_echo = false; c_vmin = 1; c_vtime = 0 } in
@@ -82,6 +93,7 @@ let with_raw_terminal f =
     ~finally:(fun () -> Unix.tcsetattr Unix.stdin Unix.TCSANOW original)
     f
 
+(** [play seed] runs the interactive game loop for [seed]. *)
 let play seed =
   let game = Game.create ~seed in
   let rec loop () =

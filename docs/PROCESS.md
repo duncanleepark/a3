@@ -2,74 +2,185 @@
 
 ## Task 1: Move around a tiny hand-built world and see the updated position
 
-Planned behavior: Build a small map from explicit data (no seed, no generator), place the camel, apply w/a/s/d, and print the grid in the terminal. The camel moves one cell per legal key; moving into a wall or off the map changes nothing (including the turn count).
+Planned behavior: Build a small map from explicit data, place the camel, and
+apply movement and wait actions. The camel should move one cell per legal
+action. Moving into a wall or outside the map should change nothing,
+including the turn count. Waiting should leave the camel in place and consume
+one turn.
 
-Planned check: On a 3x3 world with walls on the right column and the camel at the center, apply `d`, `w`, `a`. Expected: `d` is blocked (position and turns unchanged), `w` moves up (turns = 1), `a` moves left (turns = 2). Also apply `.` and confirm the position is unchanged but turns increases by one.
+Planned check: Construct a hand-built world and apply a blocked move, a legal
+move, and a wait. The blocked move should leave the camel and turn count
+unchanged. The legal move should update the camel position and increment the
+turn count. The wait should increment the turn count without moving the camel.
 
-Actual check and result: [What I ran (OUnit test name or manual run), what I observed, whether it matched.]
+Actual check and result: The OUnit tests `game blocked move`, `game collects
+lambda`, and `game wait` construct worlds with `World.from_setup`, apply
+`Game.act`, and inspect the resulting positions and turn counts. The blocked
+move leaves the camel at `(3, 1)` with zero turns. The legal move changes the
+position and increments the turn count. The wait increments the turn count
+while leaving the camel in place. These checks passed.
 
-Decision or revision: [What the evidence led me to change or keep, and why.]
+Decision or revision: Movement and turn handling remain in `Game.act`, while
+map construction remains in `World.from_setup`. This keeps movement rules
+independent of terminal input.
 
 ## Task 2: Fog of war reveals a cross and stays revealed
 
-Planned behavior: Rendering shows `?` for undiscovered cells. Before the first input the camel's cell and its in-bounds orthogonal neighbors are revealed; each successful move reveals the same cross at the new position. Revealed cells stay revealed.
+Planned behavior: Before the first input, reveal the camel's cell and its
+in-bounds orthogonal neighbors. After a successful move or wait, reveal the
+same cross at the camel's new position. Revealed cells should remain revealed,
+and cells beyond an adjacent wall should remain hidden.
 
-Planned check: On a 5x5 world with the camel in a corner, check that exactly 3 cells are revealed initially (camel plus two in-bounds neighbors). Move one step and check that the new cross is added, old cells remain revealed, and a wall adjacent to the camel is revealed but the cell beyond it is not. Also check that the sandworm is displayed while still in fog, without revealing its cell's terrain.
+Planned check: Construct a small world with the camel near a wall. Check the
+initial camel and neighboring cells, verify that an adjacent wall is revealed,
+and verify that a cell beyond that wall is hidden.
 
-Actual check and result: [...]
+Actual check and result: The OUnit tests `game initial reveal` and `fog stops
+at wall` inspect `Game.is_revealed`. The camel's initial cross is revealed, a
+wall adjacent to the camel is visible, and the cell beyond that wall remains
+hidden. The tests passed.
 
-Decision or revision: [...]
+Decision or revision: Fog state is stored as a separate Boolean 2D array in
+`Game.t`. This prevents rendering or actor visibility from changing the world
+terrain.
 
 ## Task 3: Collect a lambda once and track the score
 
-Planned behavior: Entering a lambda cell adds its value (copper 1, silver 3, gold 5) to the score and removes it permanently from the map.
+Planned behavior: Entering a lambda cell should add its value to the score and
+remove it permanently. Copper, silver, and gold should be worth 1, 3, and 5
+points respectively.
 
-Planned check: Put a silver lambda directly right of the camel. Move `d`, then `a`, then `d` again. Expected: score is 3 after the first visit and stays 3 after revisiting; the cell displays as `.` afterward.
+Planned check: Place a silver lambda next to the camel, enter it, leave it,
+and enter it again. The score should increase to 3 on the first visit and
+remain 3 on the second visit. The lambda should no longer be present.
 
-Actual check and result: [...]
+Actual check and result: The OUnit tests `game collects lambda` and `game
+collects lambda once` move onto a silver lambda, inspect the score, inspect
+`World.lambda_at`, and revisit the cell. The score becomes 3, the lambda is
+removed, and the score does not increase on revisiting. The tests passed.
 
-Decision or revision: [...]
+Decision or revision: Collection is implemented through the mutable
+`World.collect_lambda` operation. The world removes the lambda in place, so
+all later observations see the collected state.
 
 ## Task 4: Sandworm moves deterministically toward the camel
 
-Planned behavior: After each successful move or wait that has not ended the game, the sandworm moves one step to the legal neighbor with minimum Manhattan distance to the camel, breaking ties in N, E, S, W order. It cannot enter walls, the exit, or out-of-bounds cells, and it does not move if no legal neighbor exists. It may move through lambdas without collecting them.
+Planned behavior: After every successful move or wait that does not end the
+game, the sandworm should move to the legal neighboring cell with minimum
+Manhattan distance to the camel. Ties should be resolved in north, east,
+south, west order. The sandworm must not enter walls, the exit, or cells
+outside the map. If it has no legal neighbor, it should stay in place.
 
-Planned check: Three tiny scenarios: (a) a tie between two neighbors, expecting the north-first choice; (b) the best neighbor is a wall or the exit, expecting the next-best legal neighbor (even if farther than the current cell); (c) a fully boxed-in sandworm, expecting no movement. Also check that a blocked camel move does not move the sandworm.
+Planned check: Test a tie, blocked neighboring cells, an exit that blocks a
+candidate, a fully boxed-in sandworm, and a blocked camel move. The expected
+result is deterministic movement according to the stated order, with no
+movement when no legal move exists.
 
-Actual check and result: [...]
+Actual check and result: The OUnit tests `sandworm tie breaks north first`,
+`sandworm skips walls and exit`, `boxed-in sandworm does not move`, and `game
+blocked move` cover these cases. The sandworm chooses the north candidate on
+a tie, skips walls and the exit, remains boxed in when appropriate, and does
+not move after a blocked camel action. The tests passed.
 
-Decision or revision: [...]
+Decision or revision: Candidate positions are constructed in north, east,
+south, west order and selected with a strict distance comparison. Keeping the
+first candidate on equal distance implements the required tie-breaking rule.
 
 ## Task 5: Turn order, exit behavior, and game outcomes
 
-Planned behavior: Turn order follows R2: increment turns, move the camel, reveal; defeat if on the sandworm's cell (no lambda collected); otherwise collect; victory if on the exit with at least 8 points; otherwise move the sandworm and check defeat. No actions are accepted after the game ends.
+Planned behavior: A legal move or wait should increment the turn count and
+reveal the camel's neighborhood. Collision with the sandworm should cause
+defeat before lambda collection. Otherwise, collection should occur, followed
+by victory if the camel is on the exit with at least 8 points. If the game
+does not end, the sandworm should move. No actions should be accepted after
+the game ends.
 
-Planned check: (a) Camel steps onto the exit with 7 points: the game continues and the exit acts as floor. (b) Camel steps onto the exit with 8 points: victory, shown as `^`, and further keys do nothing. (c) Camel steps onto the sandworm's cell that holds a lambda: defeat, score unchanged, shown as `X`. (d) The sandworm steps onto the camel after a wait: defeat.
+Planned check: Test entering the exit with fewer than 8 points, reaching the
+exit with at least 8 points, collision before collection, collision caused by
+the sandworm after a wait, and an action after victory.
 
-Actual check and result: [...]
+Actual check and result: The OUnit tests `exit requires eight points`, `victory
+stops the game`, `collision prevents collection`, and `sandworm collision after
+wait` cover these transitions. The exit remains traversable with 7 points,
+8 points produces victory, a collision leaves a lambda uncollected, a
+sandworm collision produces defeat, and a move after victory does not change
+the game. The tests passed.
 
-Decision or revision: [...]
+Decision or revision: The action order is implemented explicitly in
+`Game.act`: camel update, reveal, collision check, collection, victory check,
+and then sandworm movement. This matches the assignment's required turn
+ordering.
 
 ## Task 6: Seeded generation is reproducible and valid
 
-Planned behavior: A seed deterministically produces a labyrinth of multiple rooms, at most 20 rows by 70 columns, with the camel, sandworm, exit, and lambdas placed per R1.3. Different seeds produce visibly different terrain.
+Planned behavior: A nonnegative seed should deterministically produce a
+bounded labyrinth with multiple rooms, varied terrain, distinct actor
+placements, reachable paths, and enough reachable lambda points to escape.
 
-Planned check: For seeds 0 through ~20, generate twice and check that the two maps are identical. Check that: the camel, sandworm, and exit are on distinct floor cells; the exit and sandworm are at Manhattan distance of at least 6 from the camel; the camel can reach the exit; the sandworm can reach the camel without crossing the exit; there are multiple lambdas on distinct reachable floor cells worth at least 8 points in total; and at least two seeds give different terrain. Manually print two seeds to look at them.
+Planned check: For seeds 0 through 20, generate each map twice and check
+dimensions, reproducibility, distinct placements, Manhattan-distance
+requirements, paths, lambda uniqueness and reachability, and a total lambda
+value of at least 8. Also compare terrain from different seeds.
 
-Actual check and result: [...]
+Actual check and result: The OUnit tests `same seed`, `generated dimensions`,
+`generated positions`, `generated lambdas`, `generated paths`, and `generated
+terrain varies` perform these checks. The generated maps are reproducible,
+fit within 20 rows by 70 columns, contain valid distinct placements, have
+the required paths, and contain at least 8 reachable lambda points. Terrain
+variation is checked after treating the exit as floor, so the test observes
+wall-layout variation rather than only a changed exit location. The tests
+passed for all listed seeds.
 
-Decision or revision: [...]
+Decision or revision: Initial lambda placement was probabilistic and could
+fail to provide enough points. The generator now finds reachable cells first,
+places guaranteed gold and silver lambdas for 8 points, and adds optional
+copper lambdas afterward. The generator also selects the exit separately from
+the sandworm and adds seed-dependent wall variation while preserving the
+connected corridor structure.
 
 ## Task 7: Play the full game in the terminal with immediate input
 
-Planned behavior: `dune exec` with a seed argument (or an interactive prompt) starts the game. Keys are read without pressing Return, the map is redrawn in place, and the display shows the seed, score, required score, turn count, and a controls legend. `q` quits and terminal settings are restored. An invalid seed gives a helpful error.
+Planned behavior: `dune exec a3 -- <seed>` should start the game, accept keys
+without requiring Return, redraw the map in place, show the seed, score,
+required score, turn count, and controls, and restore terminal settings after
+quitting. Invalid seeds should produce helpful errors.
 
-Planned check: Run with seed 42, press `d`/`s` and confirm the screen redraws immediately, press an unrecognized key and confirm nothing changes, then press `q` and confirm the terminal echoes typed characters normally again. Run with seed `abc` and with `-5` and confirm an error message rather than a crash.
+Planned check: Run the executable with a fixed seed in a real terminal. Press
+movement, wait, unknown, and quit keys. Confirm immediate input, in-place
+redrawing, correct turn behavior, and restored terminal echo. Run with
+`abc` and `-5` to check invalid-seed handling.
 
-Actual check and result: [...]
+Actual check and result: The game was run with `dune exec a3 -- 42` in a real
+terminal. The map redraws in place using ANSI clear-screen and cursor-home
+sequences. The interface displays the seed, score, required score, turns, and
+controls. Movement and wait keys are processed immediately, unknown keys do
+not perform an action, and `q` quits. The commands
+`dune exec a3 -- abc` and `dune exec a3 -- -5` both produce an error message
+and usage text instead of crashing. The checks passed.
 
-Decision or revision: [...]
+Decision or revision: Terminal setup and restoration are isolated in
+`with_raw_terminal` so terminal settings are restored even when the game
+loop exits.
 
 ## Validation Summary (R5.2)
 
-[Brief note on how each completed task was validated: which OUnit tests cover it, which checks were manual, and why the expected results follow from the rules in the handout.]
+The library behavior is validated by an OUnit suite runnable with `dune test`.
+The suite covers direct map construction, terrain and lambda access, seeded
+reproducibility, dimensions, actor placement, reachable paths, terrain
+variation, lambda guarantees, movement, waiting, fog of war, collection,
+sandworm movement, collisions, exit behavior, victory, defeat, and ignoring
+actions after the game ends.
+
+The generated-map properties are checked across seeds 0 through 20. The
+interactive interface was also checked manually in a real terminal with seed
+42, including immediate input, in-place redrawing, quitting, and invalid
+seed errors.
+
+Final automated validation:
+
+```text
+dune build
+dune test
+Ran: 24 tests
+OK
+```
